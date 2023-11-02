@@ -1,38 +1,44 @@
 import pandas as pd
-from datetime import timedelta, date
+import os
 
-# Define the Portugal public holidays for a given year range
-portugal_holidays = {
-    '2023': ['2023-01-01', '2023-04-07', '2023-04-09', '2023-04-25', 
-             '2023-05-01', '2023-06-08', '2023-06-10', '2023-08-15', '2023-10-05',
-             '2023-11-01', '2023-12-01', '2023-12-08', '2023-12-25'],
-    '2022': ['2022-01-01', '2022-04-15', '2022-04-17', '2022-04-25', 
-             '2022-05-01', '2022-06-10', '2022-06-16', '2022-08-15', '2022-10-05',
-             '2022-11-01', '2022-12-01', '2022-12-08', '2022-12-25']
-}
+# Definir o caminho dos arquivos
+sample_path = '../data/sample_June2022.csv'
+quadriculas_path = '../data/wktComplete.csv'
+meteorologia_path = '../data/meteoJune2022June2023.csv'
 
-# Function to check if a date is a public holiday in Portugal
-def is_public_holiday(date, holiday_list):
-    return date.strftime('%Y-%m-%d') in holiday_list
+# Carregar os dados dos CSVs com a codificação correta e suprimir o aviso de baixa memória
+sample_df = pd.read_csv(sample_path, parse_dates=['Datetime'], encoding='ISO-8859-1', low_memory=False)
+quadriculas_df = pd.read_csv(quadriculas_path, encoding='ISO-8859-1')
+meteorologia_df = pd.read_csv(meteorologia_path, parse_dates=['datetime'], encoding='ISO-8859-1')
 
-# Generate a date range
-start_date = date(2022, 6, 1)
-end_date = date(2023, 6, 30)
+# Filtrar os terminais em roaming e no intervalo de tempo desejado
+sample_df['Datetime'] = pd.to_datetime(sample_df['Datetime'])
+sample_df = sample_df[(sample_df['Datetime'].dt.hour >= 9) & (sample_df['Datetime'].dt.hour <= 24)]
+sample_df = sample_df[sample_df['C2'] > 0]  # C2 é o n.º de terminais distintos, em roaming
 
-# Function to generate the dates
-def daterange(start_date, end_date):
-    for n in range(int((end_date - start_date).days) + 1):
-        yield start_date + timedelta(n)
+# Extrair as coordenadas da quadricula
+quadriculas_df = quadriculas_df[['grelha_id', 'latitude', 'longitude']]
+sample_df = sample_df.merge(quadriculas_df, left_on='Grid_ID', right_on='grelha_id', how='left')
 
-# Create a list of dictionaries with date, is_weekend, and is_public_holiday
-date_info = [{
-    'date': single_date.strftime('%Y-%m-%d'),
-    'is_weekend': single_date.weekday() > 4,
-    'is_public_holiday': is_public_holiday(single_date, portugal_holidays[single_date.strftime('%Y')])
-} for single_date in daterange(start_date, end_date)]
+# Filtrar os dados meteorológicos para o intervalo de datas do dataframe sample
+meteorologia_df = meteorologia_df.set_index('datetime')
+sample_df['date'] = sample_df['Datetime'].dt.date
+sample_df = sample_df.join(meteorologia_df[['temp', 'precip']], on='date', how='left')
 
-# Create a DataFrame
-df = pd.DataFrame(date_info)
+# Renomear as colunas de temperatura e precipitação
+sample_df.rename(columns={'temp': 'temperatura', 'precip': 'chuva'}, inplace=True)
 
-# Save to CSV
-df.to_csv('weekend_and_holidays_portugal.csv', index=False)
+# Selecionar as colunas desejadas para o novo CSV
+columns_to_keep = ['Grid_ID', 'Datetime', 'C2', 'latitude', 'longitude', 'temperatura', 'chuva']
+final_df = sample_df[columns_to_keep]
+
+# Obter o caminho da pasta raiz
+root_folder = os.getcwd()  # Isso obtém o diretório de trabalho atual
+
+# Caminho completo para o novo arquivo CSV
+output_file_path = os.path.join(root_folder, 'resultado_final.csv')
+
+# Salvar o novo dataframe em um CSV na pasta raiz
+final_df.to_csv(output_file_path, index=False)
+
+print(f"CSV final criado com sucesso em {output_file_path}!")
