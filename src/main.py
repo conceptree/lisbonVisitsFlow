@@ -21,8 +21,8 @@ else:
 sample_df = sample_df[(sample_df['Datetime'].dt.hour >= 9) & (sample_df['Datetime'].dt.hour < 24)]
 sample_df = sample_df[sample_df['C2'] > 0]  # C2 é o n.º de terminais distintos, em roaming
 
-# Extrair a coluna wkt da quadricula
-quadriculas_df = quadriculas_df[['grelha_id', 'wkt']]
+# Extrair as colunas relevantes da quadricula
+quadriculas_df = quadriculas_df[['grelha_id', 'wkt', 'nome', 'freguesia']]
 sample_df = sample_df.merge(quadriculas_df, left_on='Grid_ID', right_on='grelha_id', how='left')
 
 # Assegurar que ambos os campos de data estão no mesmo formato para o merge
@@ -36,8 +36,11 @@ sample_df = sample_df.merge(meteorologia_df[['date', 'temp', 'precip']], on='dat
 sample_df.rename(columns={'temp': 'temperatura', 'precip': 'chuva'}, inplace=True)
 
 # Selecionar as colunas desejadas para o novo CSV
-columns_to_keep = ['Grid_ID', 'Datetime', 'C2', 'wkt', 'temperatura', 'chuva']
+columns_to_keep = ['Grid_ID', 'Datetime', 'C2', 'C4', 'C7', 'C8', 'D1', 'nome', 'freguesia', 'wkt', 'temperatura', 'chuva']
 final_df = sample_df[columns_to_keep]
+
+# Imprimir as informações do DataFrame final
+print(final_df.info())
 
 # Obter o caminho da pasta raiz
 root_folder = os.getcwd()  # Isso obtém o diretório de trabalho atual
@@ -48,4 +51,4 @@ output_file_path = os.path.join(root_folder, '../data/resultado_final.csv')
 # Salvar o novo dataframe em um CSV na pasta raiz
 final_df.to_csv(output_file_path, index=False)
 
-print(f"CSV final criado com sucesso em {output_file_path}!")
+print(f"CSV final criado com sucesso em {output_file_path}")
