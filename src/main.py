@@ -2,24 +2,44 @@ import pandas as pd
 import os
 
 # Definir o caminho dos arquivos
-sample_path = '../data/sample_June2022.csv'
 quadriculas_path = '../data/wktComplete.csv'
 meteorologia_path = '../data/meteorologia.csv'
 
-# Carregar os dados dos CSVs com a codificação correta e suprimir o aviso de baixa memória
-sample_df = pd.read_csv(sample_path, encoding='ISO-8859-1', low_memory=False)
+chunk_size = 10000  # Ajustar conforme a necessidade de memória onde o script é corrido
+
+# Lista de caminhos dos arquivos de amostra
+sample_paths = []
+months = ["June", "July", "August"]
+year = "2022"
+for month in months:
+    if month == "January":
+        year = "2023"
+    sample_paths.append("../data/datasets/"+month+year+".csv")
+
+print(sample_paths)
+# Lista para armazenar os DataFrames
+dataframes = []  # List to store processed chunks
+
+for sample_path in sample_paths:
+    for chunk in pd.read_csv(sample_path, encoding='ISO-8859-1', chunksize=chunk_size, low_memory=False):
+        # Check if 'Datetime' column exists in the current chunk
+        if 'Datetime' in chunk.columns:
+            chunk['Datetime'] = pd.to_datetime(chunk['Datetime'], utc=True)
+        else:
+            raise ValueError("A coluna 'Datetime' não foi encontrada no arquivo CSV.")
+
+        # Apply any additional processing needed for each chunk
+        # For example, filtering based on 'Datetime' and 'C2'
+        chunk = chunk[(chunk['Datetime'].dt.hour >= 9) & (chunk['Datetime'].dt.hour < 24) & (chunk['C2'] > 0)]
+
+        # Append the processed chunk to the list
+        dataframes.append(chunk)
+
+
+# Concatenar todos os DataFrames em um único
+sample_df = pd.concat(dataframes, ignore_index=True)
 quadriculas_df = pd.read_csv(quadriculas_path, encoding='ISO-8859-1')
 meteorologia_df = pd.read_csv(meteorologia_path, parse_dates=['datetime'], encoding='ISO-8859-1')
-
-# Verificar se a coluna 'Datetime' existe e converter para datetime
-if 'Datetime' in sample_df.columns:
-    sample_df['Datetime'] = pd.to_datetime(sample_df['Datetime'])
-else:
-    raise ValueError("A coluna 'Datetime' não foi encontrada no arquivo CSV.")
-
-# Filtrar os terminais em roaming e no intervalo de tempo desejado
-sample_df = sample_df[(sample_df['Datetime'].dt.hour >= 9) & (sample_df['Datetime'].dt.hour < 24)]
-sample_df = sample_df[sample_df['C2'] > 0]  # C2 é o n.º de terminais distintos, em roaming
 
 # Extrair as colunas relevantes da quadricula
 quadriculas_df = quadriculas_df[['grelha_id', 'wkt', 'nome', 'freguesia']]
@@ -46,7 +66,7 @@ def calculate_interval_average(row, column):
         return value / 6  # Média para 18-00h
 
 # Colunas para as quais queremos calcular a média (excluindo D1)
-columns_to_average = ['C2', 'C4', 'C7', 'C8']
+columns_to_average = ['C2', 'C4', 'C7']
 
 # Certifique-se de que as colunas são numéricas
 for column in columns_to_average:
@@ -81,7 +101,7 @@ def calculate_country_average(row):
 sample_df['average_countries'] = sample_df.apply(calculate_country_average, axis=1)
 
 # Selecionar as colunas desejadas para o novo CSV
-columns_to_keep = ['Grid_ID', 'Datetime', 'C2', 'C4', 'C7', 'C8', 'D1', 'nome', 'freguesia', 'wkt', 'temperatura', 'chuva'] + average_columns + ['unique_countries', 'average_countries']
+columns_to_keep = ['Grid_ID', 'Datetime', 'C2', 'C4', 'C7', 'D1', 'nome', 'freguesia', 'wkt', 'temperatura', 'chuva'] + average_columns + ['unique_countries', 'average_countries'] 
 final_df = sample_df[columns_to_keep]
 
 # Renomear columnas para algo mais semantico
@@ -91,7 +111,6 @@ final_df.rename(columns={
     'C2': 'Roaming_Terminals',
     'C4': 'Remaining_Roaming_Terminals',
     'C7': 'Enter_Roaming_Terminals',
-    'C8': 'Exist_Roaming_Terminals',
     'D1': 'Top_10_Countries',
     'nome': 'Grid_Name',
     'freguesia': 'Town',
@@ -100,8 +119,7 @@ final_df.rename(columns={
     'chuva': 'Precipitation',
     'average_C2':'Average_Unique_Roaming',
     'average_C4':'Average_Remaining_Roaming',
-    'average_C7':'Average_Entries_Roaming',
-    'average_C8':'Average_Exist_Roaming'
+    'average_C7':'Average_Entries_Roaming'
 }, inplace=True)
 
 # Imprimir as informações do DataFrame final
@@ -111,7 +129,7 @@ print(final_df.info())
 root_folder = os.getcwd()
 
 # Caminho completo para o novo arquivo CSV
-output_file_path = os.path.join(root_folder, '../data/resultado_final.csv')
+output_file_path = os.path.join(root_folder, '../data/final.csv')
 
 # Salvar o novo dataframe em um CSV na pasta raiz
 final_df.to_csv(output_file_path, index=False)
